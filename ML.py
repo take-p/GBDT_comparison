@@ -9,15 +9,18 @@ from sklearn.ensemble import RandomForestClassifier
 # GBDT(Gradient Boosting Decision Tree)
 import xgboost as xgb # 2016年登場？
 from xgboost import XGBClassifier
-#import lightgbm as lgb # 2017年登場？
+import lightgbm as lgb # 2017年登場？
 from lightgbm import LGBMClassifier
+import catboost as cb
 from catboost import CatBoostClassifier # 2018年登場？
 
+"""
 from keras.models import Sequential
 from keras.layers import Dense, Activation
 from keras.utils import np_utils
 from keras import backend as K
 from keras.wrappers.scikit_learn import KerasClassifier
+"""
 
 def model_rf(X_train, X_test, y_train, y_test):
     # GSで検証するパラメータ
@@ -70,14 +73,14 @@ def model_xgb(X_train, X_test, y_train, y_test):
 
 def model_xgb_sklearn(X_train, X_test, y_train, y_test):
     param_grid = {
-        #'eta': [0.2, 0.3, 0.4], # 学習の重み
-        #'gamma': [0, 1, 2],
+        'eta': [0.2, 0.3, 0.4], # 学習の重み
+        'gamma': [0, 1, 2],
         'max_depth': [5, 6, 7], # 木の深さ
         'min_child_weight': [1, 2, 3], # 増加することで過学習を減らす？
-        #'max_delta_step': [0, 1, 2],
-        #'subsample': [0.8, 0.9, 1], # 使用するオブジェクトの割合
-        #'colsample_bytree': [0.8, 0.9, 1],
-        #'colsample_bylevel': [0.8, 0.9, 1],
+        'max_delta_step': [0, 1, 2],
+        'subsample': [0.8, 0.9, 1], # 使用するオブジェクトの割合
+        'colsample_bytree': [0.8, 0.9, 1],
+        'colsample_bylevel': [0.8, 0.9, 1],
     }
 
     fit_params = {
@@ -88,9 +91,11 @@ def model_xgb_sklearn(X_train, X_test, y_train, y_test):
     # モデルの生成
     model = XGBClassifier(verbose=0)
     gscv = GridSearchCV(
-        model,
+        estimator=model,
         param_grid=param_grid,
+        fit_params=fit_params,
         cv=3,
+        n_jobs=-1,
         verbose=0,
         return_train_score=False
     )
@@ -133,6 +138,9 @@ def model_lgb(X_train, X_test, y_train, y_test):
 def model_lgb_sklearn(X_train, X_test, y_train, y_test):
     param_grid = {
             'max_depth': [-1],
+            'num_leaves': [20, 25, 31, 35, 40],
+            'min_date_in_leaf': [0, 5, 15, 300],
+            #'learning_rate': [0.05, 0.1, 0.5, 1]
     }
 
     fit_params = {
@@ -142,10 +150,11 @@ def model_lgb_sklearn(X_train, X_test, y_train, y_test):
     
     model = LGBMClassifier(verbose=0)
     gscv = GridSearchCV(
-        model,
+        estimator=model,
         param_grid=param_grid,
         fit_params=fit_params,
         cv=3,
+        n_jobs=-1,
         verbose=0,
         return_train_score=False
     )
@@ -167,7 +176,7 @@ def model_cb(X_train, X_test, y_train, y_test):
 
 def model_cb_sklearn(X_train, X_test, y_train, y_test):
     param_grid = {
-        'depth': [4, 5, 6, 7, 8, 9, 10]    
+        'depth': [4, 5, 6, 7, 8, 9, 10],
     }
 
     fit_params = {
@@ -176,11 +185,13 @@ def model_cb_sklearn(X_train, X_test, y_train, y_test):
     
     model = CatBoostClassifier(iterations=100)
     gscv = GridSearchCV(
-        model,
+        estimator=model,
         param_grid=param_grid,
         fit_params=fit_params,
         cv=3,
+        n_jobs=-1,
         verbose=0,
+        return_train_score=False
     )
     gscv.fit(X_train, y_train)
 
@@ -194,7 +205,7 @@ def model_dnn(X_train, X_test, y_train, y_test):
     model = Sequential()
     model.add(Dense(100, input_dim=X_train.shape[1], activation="relu"))
     model.add(Dense(100, activation="relu"))
-    model.add(Dense(activation="relu"))
+    model.add(Dense(100, activation="relu"))
     model.compile(loss='categorical_crossentropy', optimizer="adam", metrics=['accuracy'])
     
     param_grid = {
@@ -204,9 +215,22 @@ def model_dnn(X_train, X_test, y_train, y_test):
         'nb_epoch': [10, 25],
         'batch_size': [5, 10]
     }
+
+    fit_params = {
+        'early_stopping_rounds': 100,
+        'eval_set': [[X_test, y_test]]
+    }
     
     model = KerasClassifier(build_fn=model, verbose=0)
-    gs = GridSearchCV(estimator=model, param_grid=param_grid)
+    gs = GridSearchCV(
+        estimator=model,
+        param_grid=param_grid,
+        fit_params=fit_params,
+        cv=3,
+        n_jobs=-1,
+        verbose=0,
+        return_train_score=False
+    )
     gs.fit(X_train, y_train)
 
 
@@ -236,17 +260,25 @@ if __name__ == '__main__':
 
     models = {
         'RandomForest': model_rf(X_train, X_test, y_train, y_test),
-        'XGBoost': model_xgb_sklearn(X_train, X_test, y_train, y_test),
-        'LightGBM': model_lgb_sklearn(X_train, X_test, y_train, y_test),
-        'CatBoost': model_cb_sklearn(X_train, X_test, y_train, y_test),
+        #'XGBoost': model_xgb_sklearn(X_train, X_test, y_train, y_test),
+        #'LightGBM': model_lgb_sklearn(X_train, X_test, y_train, y_test),
+        #'CatBoost': model_cb_sklearn(X_train, X_test, y_train, y_test),
         #'DNN': model_dnn(X_train, X_test, y_train, y_test)
     }
+
+    #
+    #pred_sum = np.zeros(len(y_test))
+    #pred_array = np.zeros(len(y_test))
 
     # 予測と検証
     print()
     for model, name in zip(models.values(), models.keys()):
         # 検証用データが各クラスに分類される確率を計算
         pred = model.predict(X_test)
+        
+        # print(type(pred))
+        #pred_sum += pred
+        #pred_array = np.vstack((pred_array, pred))
 
         # 閾値0.5で0, 1に丸める
         y_pred = np.where(pred > 0.5, 1, 0)
@@ -256,3 +288,19 @@ if __name__ == '__main__':
 
         print(name, '\t正解率: ', acc)
     print()
+
+    #pred_sum /= len(models)
+    #y_pred_sum = np.where(pred > 0.5, 1, 0)
+    #acc = accuracy_score(y_test, y_pred)
+    #print('バギング 正答率: ', acc)
+
+    """
+    # スタッキング
+    pred_array = np.delete(pred_array, 0, axis=0)
+    print(pred_array)
+    X_train2, X_test2, y_train2, y_test2 = train_test_split(
+        X,
+        y,
+    )
+    model = model_xgb_sklearn(X_train, X_test, y_train, y_test)
+    """
